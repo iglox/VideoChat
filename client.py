@@ -1,4 +1,5 @@
-import socket
+import socket, cv2, pickle
+import numpy as np
 
 
 class Client:
@@ -6,6 +7,7 @@ class Client:
         self.host = host
         self.port = port
         self.username = input("Username :>>> ") if not username else username
+        self.cap = cv2.VideoCapture(0)
 
     def start(self) -> None:
         print("[+] Creating socket...")
@@ -13,7 +15,16 @@ class Client:
         print("[+] Connecting to the server...")
         self.sckt.connect((self.host, self.port))
         print("[?] Server said: \"%s\"" % self.sckt.recv(1024).decode())
-        
+        try:
+            while True:
+                frame = self.cap.read()[1]
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+                self.sckt.send(pickle.dumps(gray))
+                self.sckt.recv(1024)
+        except Exception as e:
+            print(e)
+            self.sckt.send(b"STOP")
         self.sckt.close()
         print("[-] Closing connection...")
         
