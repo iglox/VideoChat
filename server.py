@@ -1,6 +1,10 @@
-import socket, logging, os, cv2, pickle
+import socket, logging, os, cv2, pickle, struct
 import numpy as np
 
+    """
+    import warnings
+    warnings.filterwarnings("ignore")
+"""
 
 class Server:
     def __init__(self, address="localhost", port=5000, servername="VideoChat", pool_lower_port=5001, pool_upper_port=65535, queue_length=5):
@@ -23,6 +27,23 @@ class Server:
         logging.warning('And this, too')
         """
 
+    def __recv_data(self, sckt):
+        data = b''
+        while len(data) < struct.calcsize("L"):
+            data += sckt.recv(4096)
+        packed_msg_size = data[:struct.calcsize("L")]
+
+        data = data[struct.calcsize("L"):]
+        msg_size = struct.unpack("L", packed_msg_size)[0]
+
+        while len(data) < msg_size:
+            data += sckt.recv(4096)
+        frame_data = data[:msg_size]
+        data = data[msg_size:]
+
+        frame = pickle.loads(frame_data)
+        sckt.send(b"ACK")
+        return frame
 
     def start(self) -> None:
         try:
@@ -35,36 +56,32 @@ class Server:
 
             while True:
                 conn, addr = self.server_socket.accept()
+                print("[+] New connection from %s:%s\n[!] Greeting the new client" % (addr[0], addr[1]))
                 conn.send(("Hello from %s" % self.servername).encode())
+                username = conn.recv(2056).decode()
+                print("[!] %s:%s's username is: %s" % (addr[0], addr[1], username))
+                conn.send(b"OK")
 
-                data = b''
-                while True:
-                    part = conn.recv(1024)
-                    data += part
-                    if len(part) < 1024:
-                        break
-                    print("recv")
-
-                while data != "STOP":
+                frame = self.__recv_data(conn)
+                while frame != "STOP":
                     try:
-                        cv2.imshow('frame', pickle.loads(data))
-                        conn.send(b"ACK")
-                    except pickle.UnpicklingError:
-                        print("error")
-
-                    data = b''
-                    while True:
-                        part = conn.recv(1024)
-                        data += part
-                        if len(part) < 1024:
+                        cv2.imshow('frame', frame)
+                        if cv2.waitKey(1) == 27:
                             break
+                    except Exception as e:
+                        print("[e] error", e)
+
+                    frame = self.__recv_data(conn)
 
                 cv2.destroyAllWindows()
+                print("[!] Closing the socket with %s:%s" % (addr[0], addr[1]))
+                conn.sendall(b"STOP")
                 conn.close()
+                print("[-] Successfully closed the socket with %s:%s" % (addr[0], addr[1]))
 
         except (OSError, KeyboardInterrupt) as e:
             if e == OSError:
-                print("Error on creation..\n\t%s" % str(e))
+                print("[e] Error on creation..\n\t%s" % str(e))
             else:  # if e == KeyboardInterrupt:
                 print(e)
                 print("\n[x]Shutting down the server...")
