@@ -1,7 +1,7 @@
 import socket, logging, os, cv2, pickle, struct
 import numpy as np
 
-    """
+"""
     import warnings
     warnings.filterwarnings("ignore")
 """
@@ -42,7 +42,6 @@ class Server:
         data = data[msg_size:]
 
         frame = pickle.loads(frame_data)
-        sckt.send(b"ACK")
         return frame
 
     def start(self) -> None:
@@ -63,6 +62,7 @@ class Server:
                 conn.send(b"OK")
 
                 frame = self.__recv_data(conn)
+                conn.send(b"ACK")
                 while frame != "STOP":
                     try:
                         cv2.imshow('frame', frame)
@@ -72,6 +72,7 @@ class Server:
                         print("[e] error", e)
 
                     frame = self.__recv_data(conn)
+                    conn.send(b"ACK")
 
                 cv2.destroyAllWindows()
                 print("[!] Closing the socket with %s:%s" % (addr[0], addr[1]))
